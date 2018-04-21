@@ -70,7 +70,10 @@ func handleConn(conn net.Conn) {
     for input.Scan() {
         messages <- who+":"+input.Text()
         timer.Reset(60 * time.Second)
-    }    	
+    }  
+    leaving <- ch
+    messages <- who + " has left"
+    conn.Close()  	
 
 
 
