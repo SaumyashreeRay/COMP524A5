@@ -1,7 +1,6 @@
 package main
 
 import (
-  // "bufio"
   "fmt"
   "log"
   "net"
@@ -20,63 +19,56 @@ var (
 
 
 func broadcaster() {
-	clients := make(map[client]bool) // all connected clients
-  	for {
-		select {
-		// Send the message to all the clients
-			case msg := <-messages:
-				for cli := range clients {
-					cli <- msg
-				}
-		// Update the clients map
-			case cli := <-entering:
-				clients[cli] = true
+    clients := make(map[client]bool) // all connected clients
+    for {
+        select {
+        case msg := <-messages:
+            for cli := range clients {
+            	select {
+								case cli <- msg:
+								default:
+            	}
+            }
+        case cli := <-entering:
+            clients[cli] = true
 
-		// Update the clients map and close the client channel
-			case cli := <-leaving:
-				delete(clients, cli)
-				close(cli)
-		}
-  	}
+        case cli := <-leaving:
+            delete(clients, cli)
+            close(cli)
+        }
+    }
 }
 
 func clientWriter(conn net.Conn, ch <-chan string) {
 	for msg := range ch {
-        fmt.Fprintln(conn, msg)
+		fmt.Fprintln(conn, msg)
     }
 }
 
 func handleConn(conn net.Conn) {
-	ch := make(chan string) // outgoing client messages
-	go clientWriter(conn, ch)
+    ch := make(chan string) // outgoing client messages
+    go clientWriter(conn, ch)
 
-  // Client's IP address
-  	who := conn.RemoteAddr().String()
+    who := conn.RemoteAddr().String()
+    ch <- "You are " + who
+    messages <- who + " has joined"
+    entering <- ch
+    timer := time.NewTimer(60 * time.Second)
 
-  	ch<-"You are " + who
-
-  	newClientMsg := who + " has joined"
-  	messages <- newClientMsg
-
-  	entering <- ch
-  	timer := time.NewTimer(60 * time.Second)
-  	go func () {
+    go func () {
   		<-timer.C
   		leaving <- ch
     	messages <- who + " has left"
-		conn.Close()
   	}()
-  	input := bufio.NewScanner(conn)
+
+    input := bufio.NewScanner(conn)
     for input.Scan() {
-        messages <- who+":"+input.Text()
+        messages <- who + ": " + input.Text()
         timer.Reset(60 * time.Second)
-    }  
+    }
+
     leaving <- ch
     messages <- who + " has left"
-    conn.Close()  	
-
-
-
 }
 
 
